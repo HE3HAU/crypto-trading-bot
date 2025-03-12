@@ -1,0 +1,11 @@
+bybit:
+  api_key: ''
+  secret_key: ''
+kucoin:
+  api_key: ''
+  passphrase: ''
+  secret_key: ''
+okx:
+  api_key: ''
+  password: ''
+  secret_key: ''
