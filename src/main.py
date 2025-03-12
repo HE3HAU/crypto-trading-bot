@@ -29,6 +29,11 @@ from src.backtesting.backtester import Backtester
 from src.risk.risk_manager import PositionSizer, StopLossCalculator, TakeProfitCalculator, DrawdownProtection, VolatilityGuard
 from src.risk.order_manager import OrderManager, Order, Position
 from src.risk.crisis_manager import CrisisManager
+from src.models.neural.data_preprocessor import DataPreprocessor
+from src.models.neural.lstm_model import LSTMModel
+from src.models.neural.gru_model import GRUModel
+from src.models.neural.model_trainer import ModelTrainer
+from src.strategies.neural_strategy import NeuralStrategy
 
 # Настройка логирования
 os.makedirs('logs', exist_ok=True)
@@ -54,6 +59,10 @@ def parse_args():
                         help='Запустить бэктестинг стратегий')
     parser.add_argument('--risk-test', dest='risk_test', action='store_true',
                         help='Протестировать модули управления рисками')
+    parser.add_argument('--train-model', dest='train_model', action='store_true',
+                        help='Обучить нейросетевую модель')
+    parser.add_argument('--use-neural', dest='use_neural', action='store_true',
+                        help='Использовать нейросетевую стратегию')
     parser.add_argument('--symbol', dest='symbol', type=str, default='BTC/USDT',
                         help='Символ торговой пары (по умолчанию BTC/USDT)')
     parser.add_argument('--timeframe', dest='timeframe', type=str, default='1h',
@@ -234,6 +243,175 @@ def main():
                 logger.info(f"Лучшие параметры SMA: {optimization_results['best_params']}")
                 
                 logger.info("Бэктестинг стратегий завершен")
+
+        # Режим обучения нейросетевой модели
+        if args.train_model:
+            logger.info("Начало обучения нейросетевой модели")
+            
+            # Получаем больше данных для обучения модели
+            training_data = data_fetcher.fetch_ohlcv(symbol, timeframe, 1000)
+            
+            if training_data.empty:
+                logger.error(f"Не удалось получить данные для обучения модели")
+            else:
+                # Создаем директорию для моделей
+                os.makedirs('models', exist_ok=True)
+                
+                # Добавляем технические индикаторы к данным
+                training_data = data_fetcher.add_indicators(training_data)
+                
+                # Инициализируем тренер моделей
+                model_trainer = ModelTrainer(
+                    models_dir='models',
+                    sequence_length=60,
+                    forecast_horizon=1,
+                    test_size=0.2,
+                    validation_size=0.1
+                )
+                
+                # Подготавливаем данные для регрессии
+                feature_columns = ['close', 'high', 'low', 'open', 'volume', 
+                                   'sma7', 'sma25', 'rsi', 'macd', 'macd_signal']
+                
+                logger.info("Подготовка данных для регрессионной модели")
+                regression_data = model_trainer.prepare_data(
+                    df=training_data,
+                    target_column='close',
+                    feature_columns=feature_columns,
+                    label_type='regression'
+                )
+                
+                # Обучаем LSTM модель для регрессии
+                logger.info("Обучение LSTM модели для регрессии")
+                lstm_model, lstm_history = model_trainer.train_lstm_model(
+                    prepared_data=regression_data,
+                    lstm_units=[100, 50],
+                    dropout_rate=0.2,
+                    learning_rate=0.001,
+                    epochs=50,
+                    batch_size=32,
+                    model_name='lstm_regression'
+                )
+                
+                # Оцениваем модель
+                if lstm_model:
+                    logger.info("Оценка LSTM модели на тестовых данных")
+                    lstm_metrics = model_trainer.evaluate_model(
+                        model=lstm_model,
+                        prepared_data=regression_data,
+                        plot_results=True
+                    )
+                    logger.info(f"Метрики LSTM модели: {lstm_metrics}")
+                
+                # Обучаем GRU модель для регрессии
+                logger.info("Обучение GRU модели для регрессии")
+                gru_model, gru_history = model_trainer.train_gru_model(
+                    prepared_data=regression_data,
+                    gru_units=[100, 50],
+                    dropout_rate=0.2,
+                    learning_rate=0.001,
+                    epochs=50,
+                    batch_size=32,
+                    model_name='gru_regression'
+                )
+                
+                # Оцениваем модель
+                if gru_model:
+                    logger.info("Оценка GRU модели на тестовых данных")
+                    gru_metrics = model_trainer.evaluate_model(
+                        model=gru_model,
+                        prepared_data=regression_data,
+                        plot_results=True
+                    )
+                    logger.info(f"Метрики GRU модели: {gru_metrics}")
+                
+                # Подготавливаем данные для классификации
+                logger.info("Подготовка данных для классификационной модели")
+                classification_data = model_trainer.prepare_data(
+                    df=training_data,
+                    target_column='close',
+                    feature_columns=feature_columns,
+                    label_type='classification',
+                    n_classes=3
+                )
+                
+                # Обучаем LSTM модель для классификации
+                logger.info("Обучение LSTM модели для классификации")
+                lstm_class_model, lstm_class_history = model_trainer.train_lstm_model(
+                    prepared_data=classification_data,
+                    lstm_units=[100, 50],
+                    dropout_rate=0.2,
+                    learning_rate=0.001,
+                    epochs=50,
+                    batch_size=32,
+                    model_name='lstm_classification'
+                )
+                
+                # Оцениваем модель
+                if lstm_class_model:
+                    logger.info("Оценка LSTM классификационной модели на тестовых данных")
+                    lstm_class_metrics = model_trainer.evaluate_model(
+                        model=lstm_class_model,
+                        prepared_data=classification_data,
+                        plot_results=False
+                    )
+                    logger.info(f"Метрики LSTM классификационной модели: {lstm_class_metrics}")
+                
+                logger.info("Обучение нейросетевых моделей завершено")
+
+        # Режим использования нейросетевой стратегии
+        if args.use_neural:
+            logger.info("Инициализация нейросетевой стратегии")
+            
+            # Проверяем наличие обученных моделей
+            if not os.path.exists('models'):
+                os.makedirs('models', exist_ok=True)
+                logger.error("Директория с моделями не найдена. Создана директория 'models'.")
+                model_files = []
+            else:
+                model_files = [f for f in os.listdir('models') if f.endswith('.h5')]
+            
+            if not model_files:
+                logger.error("Не найдены обученные модели. Сначала запустите обучение с --train-model")
+            else:
+                # Берем последнюю обученную модель
+                latest_model = sorted(model_files)[-1]
+                model_path = os.path.join('models', latest_model)
+                
+                logger.info(f"Использование модели: {model_path}")
+                
+                # Создаем препроцессор данных
+                preprocessor = DataPreprocessor(
+                    sequence_length=60,
+                    forecast_horizon=1,
+                    test_size=0.2,
+                    validation_size=0.1
+                )
+                
+                # Инициализируем нейросетевую стратегию
+                model_type = 'lstm' if 'lstm' in latest_model else 'gru'
+                neural_strategy = NeuralStrategy(
+                    model_path=model_path,
+                    model_type=model_type,
+                    preprocessor=preprocessor,
+                    prediction_threshold=0.5,
+                    use_trend=True,
+                    n_future_steps=5
+                )
+                
+                # Добавляем стратегию в список стратегий
+                strategies["Neural"] = neural_strategy
+                
+                # Анализируем текущие данные с помощью нейросетевой стратегии
+                neural_analysis = neural_strategy.analyze(processed_data)
+                
+                logger.info(f"Результат анализа нейросетевой стратегии: {neural_analysis['signal']} ({neural_analysis['reason']})")
+                
+                if 'prediction' in neural_analysis:
+                    if isinstance(neural_analysis['prediction'], list):
+                        logger.info(f"Прогноз цен на ближайшие 5 периодов: {neural_analysis['prediction']}")
+                    else:
+                        logger.info(f"Прогноз цены: {neural_analysis['prediction']}")
         
         # Режим тестирования управления рисками
         if args.risk_test:
