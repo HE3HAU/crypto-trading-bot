@@ -1,0 +1,18 @@
+# Общие настройки
+general:
+  log_level: INFO
+  base_currency: USDT
+  trade_interval: 5m  # 1m, 5m, 15m, 1h, 4h, 1d
+
+# Настройки API бирж
+exchanges:
+  okx:
+    enabled: true
+    sandbox: true  # использовать тестовый режим
+
+
+# Настройки торговли
+trading:
+  max_open_trades: 3
+  stake_amount: 100  # сумма на одну сделку в base_currency
+  strategy: simple_moving_average 

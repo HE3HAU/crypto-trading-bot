@@ -1,0 +1,27 @@
+# Виртуальное окружение
+venv/
+.env
+
+# API ключи и конфиденциальные данные
+config/api_keys.yaml
+*.pem
+*.key
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Данные и логи
+data/
+logs/
+*.log
+
+# Модели ML
+*.h5
+*.pkl
+*.model
